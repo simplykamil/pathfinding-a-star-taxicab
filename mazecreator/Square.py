@@ -17,6 +17,9 @@ class Square:
             self.state = SquareState.EMPTY
         self.neighbours = []
 
+    def __lt__(self, other):
+        return False
+
     def __repr__(self):
         return f'Square (x, y): ({self.x},{self.y}) in (row, col) ({self.row},{self.col}) of {self.state}'
 

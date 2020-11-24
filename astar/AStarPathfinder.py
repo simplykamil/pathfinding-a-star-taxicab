@@ -1,4 +1,6 @@
+from collections import defaultdict
 from queue import PriorityQueue
+from time import sleep
 
 import pygame
 
@@ -20,8 +22,6 @@ class AStarPathfinder:
             :return: valid neighbours
             :rtype: list()
             """
-            rs = r
-            cs = c
 
             up_neighbour = (r, c + 1)
             down_neighbour = (r, c - 1)
@@ -39,7 +39,7 @@ class AStarPathfinder:
 
             return v_neighbours
 
-        def _heuristic(p1: tuple, p2: tuple):
+        def _get_heuristic(p1: tuple, p2: tuple):
             """
             Get approximate distance to p2
             :param p1: position 1
@@ -52,29 +52,103 @@ class AStarPathfinder:
 
             return abs(x1 - x2) + abs(y1 - y2)
 
+        def _reconstruct_path(r, c):
+            rr, cc = r, c
+            moves = list()
+
+            while True:
+                try:
+                    rr, cc = came_from[rr][cc].get_pos()
+                    moves.append((rr, cc))
+                except:
+                    moves.reverse()
+                    return moves
+
         WINDOW = pygame.display.set_mode((800, 800))
         grid = Creator.get_grid()
         pq = PriorityQueue()
-        pq.put(1)  # placeholder for now
+
+        end_pos = None
+        start_pos = None
+        start_row, start_col = None, None
 
         for row in grid:
             for square in row:
                 if square.state == SquareState.START:
                     start_pos = square.row, square.col
+                    start_row, start_col = start_pos
                 elif square.state == SquareState.END:
                     end_pos = square.row, square.col
-
         print()
         print(f'Starting position: {start_pos}')
         print(f'Ending position: {end_pos}')
         print()
 
-        while not pq.empty():
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    pq = PriorityQueue()
+        came_from = defaultdict(dict)
 
+        g_score = defaultdict(dict)
+        f_score = defaultdict(dict)
+
+        for rq in grid:
+            for cq in rq:
+                r, c = cq.get_pos()
+                g_score[r][c] = float("inf")
+                f_score[r][c] = float("inf")
+
+        g_score[start_row][start_col] = 0
+        f_score[start_row][start_col] = _get_heuristic(start_pos, end_pos)
+
+        pq.put((f_score[start_row][start_col], grid[start_row][start_col]))
+
+        finished = False
+        while not finished:
+            current = pq.get()
+            current_square = current[1]
+            current_row, current_col = current_square.get_pos()
+
+            for n in _get_valid_neighbours(*current_square.get_pos()):
+                n_row, n_col = n
+                te_g_score = g_score[current_row][current_col] + 1
+
+                grid[n_row][n_col].change_state(SquareState.PATH)
+                if (n_row, n_col) == end_pos:
+                    finished = True
+
+                    grid[n_row][n_col].change_state(SquareState.PATH)
+                    display_path = True
+
+                    final_moves = _reconstruct_path(current_row, current_col)
+                    final_moves.append((current_row, current_col))
+                    final_moves.append((n_row, n_col))
+
+                    print(f'Path found, took {len(final_moves)} moves')
+                    print(f'Moves: {final_moves}')
+                    print()
+
+                    for r, c in final_moves:
+                        grid[r][c].change_state(SquareState.PATH)
+                        picasso.draw(WINDOW, grid)
+                        sleep(0.1)
+
+                    while display_path:
+                        for event in pygame.event.get():
+                            if event.type == pygame.QUIT:
+                                if event.type == pygame.QUIT or (
+                                        event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE):
+                                    display_path = False
+                                    break
+
+                if te_g_score < g_score[n_row][n_col]:
+                    came_from[n_row][n_col] = current_square
+                    g_score[n_row][n_col] = te_g_score
+                    f_score[n_row][n_col] = g_score[n_row][n_col] + _get_heuristic((n_row, n_col), end_pos)
+
+                if (f_score[n_row][n_col], grid[n_row][n_col]) not in pq.queue:
+                    pq.put((f_score[n_row][n_col], grid[n_row][n_col]))
+
+                grid[n_row][n_col].change_state(SquareState.VISITED)
             picasso.draw(WINDOW, grid)
+        pygame.quit()
 
 
 if __name__ == '__main__':
